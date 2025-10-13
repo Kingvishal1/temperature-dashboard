@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Temp Dashboard</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:16px}
+    h1{margin-bottom:8px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    .card{border-radius:12px;padding:12px;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
+    .label{font-size:14px;color:#666}
+    .temp{font-size:28px;font-weight:700}
+    .ts{font-size:12px;color:#888}
+    canvas{width:100%;height:200px}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>Temps (phone, laptop, mac, rpi)</h1>
+  <div id="cards" class="grid"></div>
+  <h2>History (last 60 samples per device)</h2>
+  <div id="charts" class="grid"></div>
+
+<script>
+const api = "/api/temps";
+const pollMs = 5000; // 5s
+let history = {}; // device -> [ {ts, temp} ]
+const maxPoints = 60;
+
+function createCard(device){
+  const card = document.createElement("div");
+  card.className="card";
+  card.id="card-"+device;
+  card.innerHTML = `<div class="label">${device}</div>
+    <div class="temp" id="temp-${device}">— °C</div>
+    <div class="ts" id="ts-${device}"></div>`;
+  return card;
+}
+
+function createChartCanvas(device){
+  const card = document.createElement("div");
+  card.className="card";
+  card.innerHTML = `<div class="label">${device} history</div>
+    <canvas id="chart-${device}"></canvas>`;
+  return card;
+}
+
+const charts = {}; // device -> Chart
+
+async function poll(){
+  try{
+    const r = await fetch(api);
+    const j = await r.json();
+    document.getElementById("cards").innerHTML = "";
+    document.getElementById("charts").innerHTML = "";
+    for(const device in j){
+      const d = j[device];
+      // card
+      const card = createCard(device);
+      document.getElementById("cards").appendChild(card);
+      document.getElementById("temp-"+device).innerText = d.temp_c.toFixed(1) + " °C";
+      document.getElementById("ts-"+device).innerText = new Date(d.ts).toLocaleString();
+
+      // add to history
+      if(!history[device]) history[device]=[];
+      history[device].push({ts:new Date(d.ts), temp: d.temp_c});
+      if(history[device].length>maxPoints) history[device].shift();
+
+      // chart
+      if(!charts[device]){
+        const chartCard = createChartCanvas(device);
+        document.getElementById("charts").appendChild(chartCard);
+        const ctx = document.getElementById("chart-"+device).getContext('2d');
+        charts[device] = new Chart(ctx, {
+          type:'line',
+          data:{
+            labels: history[device].map(x=>x.ts.toLocaleTimeString()),
+            datasets:[{
+              label: device,
+              data: history[device].map(x=>x.temp),
+              fill:false,
+              tension:0.2
+            }]
+          },
+          options:{
+            animation:false,
+            scales:{ y: { beginAtZero:false } }
+          }
+        });
+      } else {
+        const ch = charts[device];
+        ch.data.labels = history[device].map(x=>x.ts.toLocaleTimeString());
+        ch.data.datasets[0].data = history[device].map(x=>x.temp);
+        ch.update();
+        // ensure chart card exists (if new device)
+        if(!document.getElementById("chart-"+device)){
+          const chartCard = createChartCanvas(device);
+          document.getElementById("charts").appendChild(chartCard);
+        }
+      }
+    }
+  } catch(e){
+    console.error("poll error",e);
+  } finally {
+    setTimeout(poll, pollMs);
+  }
+}
+
+poll();
+</script>
+</body>
+</html>

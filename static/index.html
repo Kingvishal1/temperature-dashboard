@@ -11,6 +11,8 @@
     .label{font-size:14px;color:#666}
     .temp{font-size:28px;font-weight:700}
     .ts{font-size:12px;color:#888}
+    .battery{font-size:13px;color:#444;margin-top:6px}
+    .battery .percent{font-weight:700}
     canvas{width:100%;height:200px}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -24,7 +26,7 @@
 <script>
 const api = "/api/temps";
 const pollMs = 5000; // 5s
-let history = {}; // device -> [ {ts, temp} ]
+let history = {}; // device -> [ {ts, temp, batteryPercent|null} ]
 const maxPoints = 60;
 
 function createCard(device){
@@ -33,7 +35,8 @@ function createCard(device){
   card.id="card-"+device;
   card.innerHTML = `<div class="label">${device}</div>
     <div class="temp" id="temp-${device}">— °C</div>
-    <div class="ts" id="ts-${device}"></div>`;
+    <div class="ts" id="ts-${device}"></div>
+    <div class="battery" id="battery-${device}"></div>`;
   return card;
 }
 
@@ -47,23 +50,84 @@ function createChartCanvas(device){
 
 const charts = {}; // device -> Chart
 
+function makeDatasets(deviceHistory){
+  // deviceHistory = [{ts: Date, temp: number, battery: number|null}, ...]
+  const tempData = deviceHistory.map(x => x.temp);
+  const labels = deviceHistory.map(x => x.ts.toLocaleTimeString());
+  // battery may be all null or mixed
+  const batteryData = deviceHistory.some(x => x.battery !== null) ? deviceHistory.map(x => x.battery === null ? null : x.battery) : null;
+
+  const datasets = [{
+    label: 'Temperature (°C)',
+    data: tempData,
+    yAxisID: 'y',
+    fill: false,
+    tension: 0.2,
+    borderWidth: 2,
+    pointRadius: 1
+  }];
+
+  if (batteryData) {
+    datasets.push({
+      label: 'Battery (%)',
+      data: batteryData,
+      yAxisID: 'y1',
+      fill: false,
+      tension: 0.2,
+      borderDash: [6,4],
+      borderWidth: 2,
+      pointRadius: 1
+    });
+  }
+
+  return { labels, datasets };
+}
+
 async function poll(){
   try{
     const r = await fetch(api);
     const j = await r.json();
+    // Clear containers (we'll re-create; this keeps DOM simple)
     document.getElementById("cards").innerHTML = "";
     document.getElementById("charts").innerHTML = "";
+
     for(const device in j){
       const d = j[device];
+
+      // normalize battery fields
+      let batteryPercent = null;
+      let batteryStatus = null;
+      if (d.battery) {
+        if (typeof d.battery === 'number') {
+          batteryPercent = d.battery;
+        } else if (typeof d.battery === 'object') {
+          if (d.battery.percent !== undefined && d.battery.percent !== null) {
+            batteryPercent = Number(d.battery.percent);
+            if (Number.isNaN(batteryPercent)) batteryPercent = null;
+          }
+          if (d.battery.status !== undefined) batteryStatus = d.battery.status;
+        }
+      }
+
       // card
       const card = createCard(device);
       document.getElementById("cards").appendChild(card);
-      document.getElementById("temp-"+device).innerText = d.temp_c.toFixed(1) + " °C";
+      document.getElementById("temp-"+device).innerText = Number(d.temp_c).toFixed(1) + " °C";
       document.getElementById("ts-"+device).innerText = new Date(d.ts).toLocaleString();
+
+      // battery text
+      const battEl = document.getElementById("battery-"+device);
+      if (batteryPercent !== null) {
+        battEl.innerHTML = `Battery: <span class="percent">${batteryPercent.toFixed(0)}%</span>${batteryStatus ? " — " + batteryStatus : ""}`;
+      } else if (batteryStatus) {
+        battEl.innerHTML = `Battery: ${batteryStatus}`;
+      } else {
+        battEl.innerHTML = '';
+      }
 
       // add to history
       if(!history[device]) history[device]=[];
-      history[device].push({ts:new Date(d.ts), temp: d.temp_c});
+      history[device].push({ts:new Date(d.ts), temp: Number(d.temp_c), battery: batteryPercent});
       if(history[device].length>maxPoints) history[device].shift();
 
       // chart
@@ -71,32 +135,46 @@ async function poll(){
         const chartCard = createChartCanvas(device);
         document.getElementById("charts").appendChild(chartCard);
         const ctx = document.getElementById("chart-"+device).getContext('2d');
+
+        const { labels, datasets } = makeDatasets(history[device]);
+
         charts[device] = new Chart(ctx, {
           type:'line',
           data:{
-            labels: history[device].map(x=>x.ts.toLocaleTimeString()),
-            datasets:[{
-              label: device,
-              data: history[device].map(x=>x.temp),
-              fill:false,
-              tension:0.2
-            }]
+            labels: labels,
+            datasets: datasets
           },
           options:{
             animation:false,
-            scales:{ y: { beginAtZero:false } }
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+              y: { // left axis - temperature
+                type: 'linear',
+                position: 'left',
+                title: { display: true, text: '°C' }
+              },
+              y1: { // right axis - battery percent
+                type: 'linear',
+                position: 'right',
+                min: 0,
+                max: 100,
+                title: { display: true, text: '%' },
+                grid: { drawOnChartArea: false } // avoid grid overlap
+              }
+            },
+            plugins: {
+              legend: { display: true }
+            }
           }
         });
       } else {
         const ch = charts[device];
-        ch.data.labels = history[device].map(x=>x.ts.toLocaleTimeString());
-        ch.data.datasets[0].data = history[device].map(x=>x.temp);
+        const { labels, datasets } = makeDatasets(history[device]);
+
+        ch.data.labels = labels;
+        // Ensure datasets length and order matches: replace datasets fully
+        ch.data.datasets = datasets;
         ch.update();
-        // ensure chart card exists (if new device)
-        if(!document.getElementById("chart-"+device)){
-          const chartCard = createChartCanvas(device);
-          document.getElementById("charts").appendChild(chartCard);
-        }
       }
     }
   } catch(e){

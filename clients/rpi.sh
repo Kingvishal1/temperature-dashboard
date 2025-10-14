@@ -14,4 +14,4 @@ fi
 ts=$(date -Iseconds)
 curl -s -X POST http://$PI_IP:5000/api/temps \
   -H "Content-Type: application/json" \
-  -d "{\"device\":\"${DEVICE}\",\"temp_c\":${temp_c},\"ts\":\"${ts}\",\"token\":\"${TOKEN}\"}"
+  -d "{\"device\":\"${DEVICE}\",\"battery\":100,\"temp_c\":${temp_c},\"ts\":\"${ts}\",\"token\":\"${TOKEN}\"}"

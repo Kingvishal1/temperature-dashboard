@@ -4,7 +4,7 @@ TOKEN="G1egViAPwPWO6x3b9UZIjx5eZcFPmVdQtWS946TjaBxVaUxYQ1u7fhtcSZc1DKyb"
 DEVICE="mac"
 
 # Requires `brew install osx-cpu-temp`
-raw_temp=$(osx-cpu-temp)               # e.g. "57.8°C"
+raw_temp=0            # Doesn;t work because mac does't give temp info
 temp_c=$(echo "$raw_temp" | tr -d '°C')
 
 # Battery info from pmset

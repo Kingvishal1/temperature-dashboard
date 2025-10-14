@@ -31,17 +31,14 @@ def save_data():
 
 @app.route("/api/temps", methods=["POST"])
 def receive_temp():
-    print("Received request for %s", request.get_json(force=True))
     payload = request.get_json(force=True)
     token = payload.get("token")
     if token != SHARED_TOKEN:
         return jsonify({"error": "unauthorized"}), 401
 
-    print("Received request 2")
     device = payload.get("device")
     temp = payload.get("temp_c")
     ts = payload.get("ts") or datetime.utcnow().isoformat()
-    print("Received request 3")
 
     # battery is optional. Accept either:
     # - a number (percent)
@@ -77,10 +74,8 @@ def receive_temp():
             # unknown format -> ignore
             battery = None
 
-    print("Received request 4")
 
     if device is None or temp is None:
-        print("temp is none")
         return jsonify({"error": "missing fields"}), 400
 
     try:

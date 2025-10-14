@@ -22,13 +22,16 @@ else:
 
 data_lock = threading.Lock()
 
+
 def save_data():
     with data_lock:
         with open(DATA_FILE, "w") as f:
             json.dump(data, f, indent=2)
 
+
 @app.route("/api/temps", methods=["POST"])
 def receive_temp():
+    print("Received request for %s", request.get_json)
     payload = request.get_json(force=True)
     token = payload.get("token")
     if token != SHARED_TOKEN:
@@ -73,12 +76,13 @@ def receive_temp():
             battery = None
 
     if device is None or temp is None:
+        print("temp is none")
         return jsonify({"error": "missing fields"}), 400
 
     try:
         temp_val = float(temp)
     except (TypeError, ValueError):
-        return jsonify({"error": "invalid temp value"}), 400
+        temp_val = 0.0
 
     with data_lock:
         data[device] = {
@@ -92,12 +96,17 @@ def receive_temp():
 
 @app.route("/api/temps", methods=["GET"])
 def get_temps():
+    print("testtt")
     with data_lock:
         return jsonify(data)
 
+
 @app.route("/")
 def index():
+    print("test")
     return send_from_directory("static", "index.html")
 
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    print("test")
+    app.run(host="0.0.0.0", port=5000, debug=True)

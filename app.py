@@ -10,7 +10,6 @@ app = Flask(__name__, static_folder="static", static_url_path="/static")
 
 @app.route("/api/temps", methods=["POST"])
 def receive_temp():
-    print("received request: " + request.get_json)
     return temp.receive_device_info(request.get_json(force=True))
 
 

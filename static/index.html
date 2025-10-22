@@ -14,10 +14,17 @@
     .battery{font-size:13px;color:#444;margin-top:6px}
     .battery .percent{font-weight:700}
     canvas{width:100%;height:200px}
+    .room-card{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;margin-bottom:16px}
+    .room-card .label{color:#fff;opacity:0.9;font-size:16px;font-weight:600}
+    .room-card .temp{color:#fff;font-size:36px}
+    .room-card .humidity{color:#fff;font-size:18px;margin-top:8px;opacity:0.95}
+    .room-card .ts{color:#fff;opacity:0.8}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
+  <h1>Room Temperature (DHT22 Sensor)</h1>
+  <div id="room-card"></div>
   <h1>Temps (phone, laptop, mac, rpi)</h1>
   <div id="cards" class="grid"></div>
   <h2>History (last 60 samples per device)</h2>
@@ -25,9 +32,39 @@
 
 <script>
 const api = "/api/temps";
+const roomApi = "/api/room";
 const pollMs = 5000; // 5s
 let history = {}; // device -> [ {ts, temp, batteryPercent|null} ]
 const maxPoints = 60;
+
+async function pollRoom(){
+  try{
+    const r = await fetch(roomApi);
+    const data = await r.json();
+
+    const roomCardContainer = document.getElementById("room-card");
+
+    if(data.temperature !== null && data.humidity !== null){
+      roomCardContainer.innerHTML = `
+        <div class="card room-card">
+          <div class="label">Room Temperature & Humidity</div>
+          <div class="temp">${Number(data.temperature).toFixed(1)} °C</div>
+          <div class="humidity">Humidity: ${Number(data.humidity).toFixed(1)}%</div>
+          <div class="ts">${data.timestamp ? new Date(data.timestamp).toLocaleString() : 'No data'}</div>
+        </div>`;
+    } else {
+      roomCardContainer.innerHTML = `
+        <div class="card room-card">
+          <div class="label">Room Temperature & Humidity</div>
+          <div class="temp">— °C</div>
+          <div class="humidity">Humidity: — %</div>
+          <div class="ts">Waiting for sensor data...</div>
+        </div>`;
+    }
+  } catch(e){
+    console.error("room poll error", e);
+  }
+}
 
 function createCard(device){
   const card = document.createElement("div");
@@ -84,6 +121,9 @@ function makeDatasets(deviceHistory){
 }
 
 async function poll(){
+  // Poll room data
+  pollRoom();
+
   try{
     const r = await fetch(api);
     const j = await r.json();
